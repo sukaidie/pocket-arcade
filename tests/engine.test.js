@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {toggleLights,selectRecord,sudokuConflict,makeSudoku,createMines,revealMines,gomokuWin,gomokuMove,flightDestination,moveFlight} from '../engine.js';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {toggleLights,selectRecord,sudokuConflict,makeSudoku,createMines,revealMines,gomokuWin,gomokuMove,makeDeck,handValue,blackjackResult} from '../engine.js';
 test('纪录保存玩家名字，同分保留原纪录主人',()=>{
  const a=selectRecord(null,32,'小明');assert.deepEqual(a,{value:32,player:'小明'});
  assert.equal(selectRecord(a,32,'小红'),a);assert.equal(selectRecord(a,16,'小红'),a);
@@ -22,7 +22,8 @@ test('扫雷首击及周围安全，雷数与邻雷数正确',()=>{for(const fir
 test('扫雷洪水展开保留插旗，点击雷只打开该雷',()=>{const b=Array(81).fill(0);b[80]=-1;const r=revealMines(b,new Set(),new Set([40]),0);assert.equal(r.has(40),false);const f=createMines(0);const i=f.indexOf(-1);assert.deepEqual([...revealMines(f,new Set(),new Set(),i)],[i])});
 test('五子棋识别四方向，不把跨行误认连线',()=>{for(const step of [1,15,16,14]){let b=Array(225).fill(0);let start=step===14?20:0;for(let k=0;k<5;k++)b[start+k*step]=1;assert.equal(gomokuWin(b,start),true)}let b=Array(225).fill(0);for(const i of [13,14,15,16,17])b[i]=1;assert.equal(gomokuWin(b,15),false)});
 test('五子棋电脑能获胜并阻挡，计算不修改棋盘',()=>{for(const who of [1,2]){const b=Array(225).fill(0);for(let i=0;i<4;i++)b[105+i]=who;const before=b.slice();assert.equal(gomokuMove(b),109);assert.deepEqual(b,before)}});
-test('飞行棋起飞、跳格、飞跃、终点反弹与完成后不可移动',()=>{assert.equal(flightDestination(-1,5,0),null);assert.equal(flightDestination(-1,6,0),0);assert.equal(flightDestination(1,3,0),8);assert.equal(flightDestination(10,6,0),28);assert.equal(flightDestination(55,5,0),54);assert.equal(flightDestination(57,6,0),null)});
-test('飞行棋撞回对手和胜利，原状态保持不变',()=>{let b=[[7,-1,-1,-1],[0,-1,-1,-1]];const r=moveFlight(b,0,0,6);assert.equal(r.planes[1][0],-1);assert.equal(r.captures,1);assert.equal(b[1][0],0);assert.equal(moveFlight([[57,57,57,56],[-1,-1,-1,-1]],0,3,1).won,true)});
 
-test('飞行棋随机完整对局可结束，始终保持合法位置',()=>{let planes=Array.from({length:4},()=>Array(4).fill(-1)),turn=0,won=false;let seed=7;function random(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}for(let step=0;step<10000&&!won;step++){const die=1+Math.floor(random()*6),legal=planes[turn].flatMap((v,i)=>flightDestination(v,die,turn)===null?[]:[i]);if(legal.length){const result=moveFlight(planes,turn,legal[Math.floor(random()*legal.length)],die);planes=result.planes;won=result.won}assert.ok(planes.flat().every(v=>v>=-1&&v<=57));if(die!==6)turn=(turn+1)%4}assert.equal(won,true)});
+const cards=(...ranks)=>ranks.map(rank=>({rank,suit:'♠'}));
+test('21点 A 自动降为 1，花牌计 10',()=>{assert.equal(handValue(cards(1,13)),21);assert.equal(handValue(cards(1,1,9)),21);assert.equal(handValue(cards(1,1,13)),12);assert.equal(handValue(cards(11,12,5)),25)});
+test('21点天生牌优先，爆牌、庄家爆牌、平局正确结算',()=>{assert.equal(blackjackResult(cards(1,13),cards(7,7,7)),'win');assert.equal(blackjackResult(cards(7,7,7),cards(1,13)),'lose');assert.equal(blackjackResult(cards(1,13),cards(1,12)),'draw');assert.equal(blackjackResult(cards(10,10,3),cards(10,8)),'lose');assert.equal(blackjackResult(cards(10,9),cards(10,8,6)),'win');assert.equal(blackjackResult(cards(10,8),cards(9,9)),'draw')});
+test('牌组为不重复的 52 张牌',()=>{const deck=makeDeck();assert.equal(deck.length,52);assert.equal(new Set(deck.map(c=>c.suit+c.rank)).size,52);assert.ok(deck.every(c=>c.rank>=1&&c.rank<=13))});
