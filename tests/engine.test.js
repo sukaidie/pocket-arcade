@@ -1,6 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {slide,winner,bestMove,selectRecord} from '../engine.js';
-test('2048 每个方块一回合只合并一次',()=>{const r=slide([2,2,2,2,...Array(12).fill(0)],'left');assert.deepEqual(r.board.slice(0,4),[4,4,0,0]);assert.equal(r.score,8)});
-test('2048 四个方向和无效移动',()=>{let b=[2,0,0,0,...Array(12).fill(0)];assert.equal(slide(b,'left').changed,false);assert.equal(slide(b,'right').board[3],2);assert.equal(slide(b,'down').board[12],2);assert.equal(slide(slide(b,'down').board,'up').board[0],2)});
+import {test} from 'node:test';import assert from 'node:assert/strict';import {toggleLights,winner,bestMove,selectRecord} from '../engine.js';
 test('井字棋识别胜负与平局',()=>{assert.equal(winner(['X','X','X','','','','','','']),'X');assert.equal(winner(['X','O','X','X','O','O','O','X','X']),'draw')});
 test('电脑会获胜和阻挡',()=>{assert.equal(bestMove(['O','O','','X','X','','','','']),2);assert.equal(bestMove(['X','X','','','O','','','','']),2)});
 test('穷举人类所有落子，电脑不会输',()=>{function play(b){let w=winner(b);assert.notEqual(w,'X');if(w)return;for(let i=0;i<9;i++)if(!b[i]){let n=b.slice();n[i]='X';assert.notEqual(winner(n),'X');if(winner(n))continue;n[bestMove(n)]='O';play(n)}}play(Array(9).fill(''))});
@@ -17,3 +15,6 @@ test('记忆翻牌次数越少越好，未完成不记分',()=>{
  assert.equal(selectRecord(a,12,'小红',true),a);
  assert.deepEqual(selectRecord(a,8,'小红',true),{value:8,player:'小红'});
 });
+
+test('熄灯角落只切换自身及有效邻居，不跨行',()=>{const b=toggleLights(Array(16).fill(false),3);assert.deepEqual(b.flatMap((v,i)=>v?[i]:[]),[2,3,7])});
+test('熄灯同一格操作两次恢复，生成的局面可以逆向解开',()=>{const blank=Array(16).fill(false);let b=blank;for(const i of [0,5,10,15])b=toggleLights(b,i);for(const i of [15,10,5,0])b=toggleLights(b,i);assert.deepEqual(b,blank)});
