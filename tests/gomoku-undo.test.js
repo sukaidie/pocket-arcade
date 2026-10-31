@@ -50,3 +50,18 @@ test('终局后悔棋恢复可下棋状态',()=>{
  assert.equal(ui.run('state.over'),false);assert.equal(ui.run('state.result'),'');
  assert.equal(ui.elements.get('#board').children[0].disabled,false);
 });
+
+test('玩家连成五子触发庆祝，悔棋和重新开始清除特效',()=>{
+ const ui=setup();
+ ui.run("for(let i=0;i<4;i++)state.b[105+i]=1;state.moves=4;drawGomoku()");
+ ui.elements.get('#board').children[109].onclick();
+ assert.equal(ui.run('state.over'),true);
+ assert.equal(ui.elements.get('#win-effects').children.length,37);
+ assert.equal(ui.run('gomokuWinningCells().length'),5);
+ ui.elements.get('#controls').children[0].onclick();
+ assert.equal(ui.elements.get('#win-effects').children.length,0);
+ assert.equal(ui.run('state.over'),false);
+ ui.elements.get('#board').children[109].onclick();
+ ui.run("game='gomoku';start()");
+ assert.equal(ui.elements.get('#win-effects').children.length,0);
+});

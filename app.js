@@ -4,7 +4,7 @@ const names={mines:'扫雷',gomoku:'五子棋',blackjack:'21点',lights:'熄灯�
 const rules={mines:'9×9 棋盘藏着 10 颗雷。数字表示周围雷数；首次开格及周围安全。',gomoku:'你执黑先手，与电脑对战。横、竖或斜线连成五子即获胜（自由规则，无禁手）。',blackjack:'与庄家比点数，尽量接近 21 点；超过 21 点即爆牌。A 自动计作 1 或 11，J/Q/K 计 10。',lights:'点击一盏灯会切换它和上下左右邻灯，试着熄灭全部灯！',memory:'每次翻开两张牌，找出全部 8 对相同图案。',sudoku:'在空格填入 1—9，让每行、每列、每个九宫格都不重复。'};
 let player='';
 const records=new Map();
-function clean(){clearInterval(timer);clearTimeout(delay);timer=null;delay=null}
+function clean(){clearGomokuEffects();clearInterval(timer);clearTimeout(delay);timer=null;delay=null}
 function record(key,value,lower=false){
   if(!records.has(key)){
     let old=null;
@@ -72,8 +72,8 @@ function mineClick(i,flag=false){if(state.over||state.open.has(i))return;if(flag
 function drawMines(){board.replaceChildren();for(let i=0;i<81;i++){const v=state.field?.[i],open=state.open.has(i),showMine=state.over&&v===-1;const el=cell(showMine?'💣':state.flags.has(i)?'🚩':open?(v||''):'','mine-cell');el.classList.toggle('revealed',open);el.classList.toggle('exploded',open&&v===-1);el.dataset.number=v;el.setAttribute('aria-label',`第 ${Math.floor(i/9)+1} 行第 ${i%9+1} 列，${showMine?'雷':state.flags.has(i)?'旗帜':open?`${v} 颗邻雷`:'未打开'}`);el.disabled=state.over||open;el.onclick=()=>mineClick(i);el.oncontextmenu=e=>{e.preventDefault();mineClick(i,true)};board.append(el)}updateMinesStatus()}
 function startGomoku(){state={b:Array(225).fill(0),busy:false,over:false,last:-1,moves:0,result:'',history:[]};board.className='gomoku-grid';drawGomoku();$('#hint').textContent='你执黑，电脑执白；黑点标记上一步落子。黑棋获胜时记录最少落子次数。悔棋会撤回最近一轮双方落子，可连续使用。'}
 function checkGomoku(i){if(gomokuWin(state.b,i)){state.over=true;state.result=state.b[i]===1?'🎉 你赢了！':'电脑获胜，再来一局？'}else if(state.b.every(Boolean)){state.over=true;state.result='棋盘已满，平局！'}}
-function undoGomoku(){if(!state.history.length)return;clearTimeout(delay);delay=null;const previous=state.history.pop();state.b=previous.b;state.last=previous.last;state.moves=previous.moves;state.busy=false;state.over=false;state.result='';drawGomoku()}
-function drawGomoku(){controls.replaceChildren();const undo=control('悔棋 ↶',undoGomoku);undo.disabled=!state.history.length;const r=record('pocket-gomoku',state.result==='🎉 你赢了！'?state.moves:undefined,true);status.textContent=`${state.over?state.result:state.busy?'电脑思考中…':'轮到你了 · 黑棋'} · 最佳 ${r?`${r.value} 手（${r.player}）`:'暂无纪录'}`;board.replaceChildren();state.b.forEach((v,i)=>{const el=cell('','gomoku-cell');if(v){const stone=document.createElement('span');stone.className='stone '+(v===1?'black':'white')+(state.last===i?' last':'');el.append(stone)}el.setAttribute('aria-label',`第 ${Math.floor(i/15)+1} 行第 ${i%15+1} 列，${v===1?'黑棋':v===2?'白棋':'空'}`);el.disabled=!!v||state.busy||state.over;el.onclick=()=>{if(state.busy||state.over||state.b[i])return;state.history.push({b:state.b.slice(),last:state.last,moves:state.moves});state.b[i]=1;state.moves++;state.last=i;checkGomoku(i);state.busy=!state.over;drawGomoku();if(state.over)return;delay=setTimeout(()=>{const move=gomokuMove(state.b);state.b[move]=2;state.last=move;state.busy=false;checkGomoku(move);drawGomoku()},250)};board.append(el)})}
+function undoGomoku(){if(!state.history.length)return;clearTimeout(delay);delay=null;const previous=state.history.pop();state.b=previous.b;state.last=previous.last;state.moves=previous.moves;state.busy=false;state.over=false;state.result='';clearGomokuEffects();drawGomoku()}
+function drawGomoku(){const winning=gomokuWinningCells();drawGomokuEffects(winning);controls.replaceChildren();const undo=control('悔棋 ↶',undoGomoku);undo.disabled=!state.history.length;const r=record('pocket-gomoku',state.result==='🎉 你赢了！'?state.moves:undefined,true);status.textContent=`${state.over?state.result:state.busy?'电脑思考中…':'轮到你了 · 黑棋'} · 最佳 ${r?`${r.value} 手（${r.player}）`:'暂无纪录'}`;board.replaceChildren();state.b.forEach((v,i)=>{const el=cell('','gomoku-cell');if(v){const stone=document.createElement('span');stone.className='stone '+(v===1?'black':'white')+(state.last===i?' last':'')+(winning.includes(i)?' winning-stone':'');el.append(stone)}el.setAttribute('aria-label',`第 ${Math.floor(i/15)+1} 行第 ${i%15+1} 列，${v===1?'黑棋':v===2?'白棋':'空'}`);el.disabled=!!v||state.busy||state.over;el.onclick=()=>{if(state.busy||state.over||state.b[i])return;state.history.push({b:state.b.slice(),last:state.last,moves:state.moves});state.b[i]=1;state.moves++;state.last=i;checkGomoku(i);state.busy=!state.over;drawGomoku();if(state.over)return;delay=setTimeout(()=>{const move=gomokuMove(state.b);state.b[move]=2;state.last=move;state.busy=false;checkGomoku(move);drawGomoku()},250)};board.append(el)})}
 function startBlackjack(){state={streak:0};dealBlackjack()}
 function dealBlackjack(){const streak=state.streak;state={streak,deck:makeDeck(),hand:[],dealer:[],over:false,result:''};for(let i=0;i<2;i++){state.hand.push(state.deck.pop());state.dealer.push(state.deck.pop())}board.className='blackjack-table';if(handValue(state.hand)===21||handValue(state.dealer)===21)finishBlackjack();else drawBlackjack()}
 function finishBlackjack(){if(state.over)return;state.over=true;state.result=blackjackResult(state.hand,state.dealer);if(state.result==='win')state.streak++;else if(state.result==='lose')state.streak=0;drawBlackjack()}
@@ -81,3 +81,35 @@ function hitBlackjack(){if(state.over)return;state.hand.push(state.deck.pop());c
 function standBlackjack(){if(state.over)return;while(handValue(state.dealer)<17)state.dealer.push(state.deck.pop());finishBlackjack()}
 function drawBlackjack(){board.replaceChildren();controls.replaceChildren();function handSection(title,hand,hidden){const section=document.createElement('section'),heading=document.createElement('h3');heading.textContent=title+' · '+(hidden?`明牌 ${handValue([hand[0]])} 点`:`${handValue(hand)} 点`);section.append(heading);const cards=document.createElement('div');cards.className='playing-hand';hand.forEach((c,i)=>{const card=document.createElement('div');card.className='playing-card';if(hidden&&i===1){card.classList.add('card-hidden');card.textContent='✳';card.setAttribute('aria-label','庄家暗牌')}else{if(c.suit==='♥'||c.suit==='♦')card.classList.add('red-suit');const rank=c.rank===1?'A':c.rank===11?'J':c.rank===12?'Q':c.rank===13?'K':String(c.rank);const corner=document.createElement('span');corner.textContent=rank;const suit=document.createElement('strong');suit.textContent=c.suit;card.append(corner,suit);card.setAttribute('aria-label',`${c.suit} ${rank}`)}cards.append(card)});section.append(cards);board.append(section)}handSection('庄家',state.dealer,!state.over);handSection(player,state.hand,false);
 const r=record('pocket-blackjack',state.streak);const message=state.over?state.result==='win'?(state.hand.length===2&&handValue(state.hand)===21?'🎉 天生 21 点！你赢了':'🎉 你赢了！'):state.result==='draw'?'平局，连胜保留':handValue(state.hand)>21?'爆牌了，本局庄家获胜':'庄家获胜，再试一局？':'轮到你了：要牌还是停牌？';status.textContent=`${message} · 连胜 ${state.streak} · 最佳 ${r?`${r.value} 连胜（${r.player}）`:'暂无纪录'}`;const hit=control('要牌 ＋',hitBlackjack),stand=control('停牌 ✓',standBlackjack);hit.disabled=stand.disabled=state.over;const next=control('下一局 →',dealBlackjack);next.disabled=!state.over;$('#hint').textContent='庄家不足 17 点必须要牌，达到 17 点停牌（含软 17）。两张牌的天生 21 点优先于普通 21 点。胜局累计连胜，平局保留，败局归零；重新开始重置本轮连胜。'}
+
+function clearGomokuEffects(){
+  $('#win-effects').replaceChildren();
+  board.classList.toggle('gomoku-victory',false);
+}
+function gomokuWinningCells(){
+  if(!state.over||state.last<0||!gomokuWin(state.b,state.last))return [];
+  const x=state.last%15,y=Math.floor(state.last/15),who=state.b[state.last];
+  for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
+    const line=[state.last];
+    for(const sign of [-1,1])for(let n=1;n<15;n++){
+      const xx=x+dx*n*sign,yy=y+dy*n*sign;
+      if(xx<0||xx>=15||yy<0||yy>=15||state.b[yy*15+xx]!==who)break;
+      line.push(yy*15+xx);
+    }
+    if(line.length>=5)return line;
+  }
+  return [];
+}
+function drawGomokuEffects(winning){
+  clearGomokuEffects();
+  if(!winning.length||state.b[state.last]!==1)return;
+  board.classList.toggle('gomoku-victory',true);
+  const effects=$('#win-effects'),banner=document.createElement('div');
+  banner.className='victory-banner';banner.textContent='✦ 五子连珠 · 你赢了！ ✦';effects.append(banner);
+  const colors=['#e6b94f','#7f9b61','#cb8cb2','#74acb8','#e3a16e'];
+  for(let i=0;i<36;i++){
+    const confetti=document.createElement('span');confetti.className='win-confetti';
+    confetti.setAttribute('style',`--x:${(i*37)%100}%;--delay:${(i%9)*.07}s;--drift:${(i%2?1:-1)*(20+i%7*8)}px;--turn:${(i%2?1:-1)*(180+i*19)}deg;background:${colors[i%colors.length]}`);
+    effects.append(confetti);
+  }
+}
