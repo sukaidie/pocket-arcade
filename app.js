@@ -1,17 +1,43 @@
-import {slide,winner,bestMove} from './engine.js';
+import {slide,winner,bestMove,selectRecord} from './engine.js';
 const $=s=>document.querySelector(s),dialog=$('#game-dialog'),board=$('#board'),status=$('#status'),controls=$('#controls');let game='',timer=null,delay=null,state={},touch=null;
 const names={'2048':'2048',snake:'贪吃蛇',memory:'记忆翻牌',ttt:'井字棋'};
 const rules={'2048':'用方向键或在棋盘上滑动，合并相同数字，向 2048 出发。',snake:'吃到果实就能长大，注意别碰到墙壁或自己。',memory:'每次翻开两张牌，找出全部 8 对相同图案。',ttt:'你执 ×，电脑执 ○。横、竖或斜线率先连成三个即获胜。'};
-function clean(){clearInterval(timer);clearTimeout(delay);timer=null;delay=null}function best(key,value){let old=0;try{old=Number(localStorage.getItem(key))||0;if(value>old)localStorage.setItem(key,String(value))}catch{}return Math.max(old,value)}
+let player='';
+const records=new Map();
+function clean(){clearInterval(timer);clearTimeout(delay);timer=null;delay=null}
+function record(key,value,lower=false){
+  if(!records.has(key)){
+    let old=null;
+    try{const raw=JSON.parse(localStorage.getItem(key));
+      if(typeof raw==='number'&&raw>0)old={value:raw,player:'历史玩家'};
+      else if(raw&&Number.isFinite(raw.value)&&raw.value>0&&typeof raw.player==='string')old=raw;
+    }catch{}
+    records.set(key,old);
+  }
+  const old=records.get(key),next=selectRecord(old,value,player,lower);
+  if(next!==old){records.set(key,next);try{localStorage.setItem(key,JSON.stringify(next))}catch{}}
+  return next;
+}
+function best(key,value){const r=record(key,value);return r?`${r.value}（${r.player}）`:'暂无纪录'}
+const playerDialog=$('#player-dialog'),nameInput=$('#player-name');
+try{nameInput.value=localStorage.getItem('pocket-player')||''}catch{}
+$('#cancel-player').onclick=()=>playerDialog.close();
+$('#player-form').onsubmit=e=>{
+  e.preventDefault();const name=nameInput.value.trim();
+  if(!name){nameInput.setCustomValidity('请输入玩家昵称');nameInput.reportValidity();return}
+  player=name;try{localStorage.setItem('pocket-player',player)}catch{}
+  playerDialog.close();$('#game-title').textContent=names[game];$('#instructions').textContent=`玩家：${player} · ${rules[game]}`;dialog.showModal();start();
+};
+nameInput.oninput=()=>nameInput.setCustomValidity('');
 function cell(text,cls=''){let el=document.createElement('button');el.className='cell '+cls;el.textContent=text;return el}
 function start(){clean();board.replaceChildren();controls.replaceChildren();board.className='';$('#hint').textContent='';if(game==='2048')start2048();if(game==='snake')startSnake();if(game==='memory')startMemory();if(game==='ttt')startTTT()}
-for(const b of document.querySelectorAll('[data-game]'))b.onclick=()=>{game=b.dataset.game;$('#game-title').textContent=names[game];$('#instructions').textContent=rules[game];dialog.showModal();start()};$('#close').onclick=()=>dialog.close();dialog.addEventListener('close',clean);$('#restart').onclick=start;dialog.addEventListener('click',e=>{if(e.target===dialog){let r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
+for(const b of document.querySelectorAll('[data-game]'))b.onclick=()=>{game=b.dataset.game;playerDialog.showModal();nameInput.focus();nameInput.select()};$('#close').onclick=()=>dialog.close();dialog.addEventListener('close',clean);$('#restart').onclick=start;dialog.addEventListener('click',e=>{if(e.target===dialog){let r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
 function spawn(){let free=state.b.map((v,i)=>v?null:i).filter(v=>v!==null);if(free.length)state.b[free[Math.floor(Math.random()*free.length)]]=Math.random()<.9?2:4}
 function start2048(){state={b:Array(16).fill(0),score:0,won:false};board.className='grid4';spawn();spawn();draw2048()}
 function draw2048(){board.replaceChildren();state.b.forEach(v=>{let el=cell(v||'');el.dataset.value=v;if(v>=128)el.classList.add('high');el.tabIndex=-1;el.setAttribute('aria-label',v?String(v):'空格');board.append(el)});status.textContent=`得分 ${state.score} · 最高 ${best('pocket-2048',state.score)}`;if(state.b.includes(2048)&&!state.won){state.won=true;$('#hint').textContent='🎉 达成 2048！可以继续挑战。'}if(!['left','right','up','down'].some(d=>slide(state.b,d).changed))status.textContent+=' · 本局结束'}
 function move2048(d){const r=slide(state.b,d);if(r.changed){state.b=r.board;state.score+=r.score;spawn();draw2048()}}
 function startMemory(){state={cards:[...'🌵🍋🍄🌼🍒🦋🍀🌈🌵🍋🍄🌼🍒🦋🍀🌈'],open:[],matched:[],moves:0,locked:false};for(let i=15;i>0;i--){let j=Math.floor(Math.random()*(i+1));[state.cards[i],state.cards[j]]=[state.cards[j],state.cards[i]]}board.className='grid4';drawMemory()}
-function drawMemory(){board.replaceChildren();status.textContent=`翻牌 ${state.moves} 次 · 配对 ${state.matched.length/2}/8`;state.cards.forEach((v,i)=>{const match=state.matched.includes(i),open=state.open.includes(i);let el=cell(match||open?v:'?',match?'matched':open?'':'card-back');el.setAttribute('aria-label',match||open?v:`第 ${i+1} 张，未翻开`);el.disabled=match||open||state.locked;el.onclick=()=>{state.open.push(i);if(state.open.length===2){state.moves++;state.locked=true;const [a,b]=state.open;if(state.cards[a]===state.cards[b]){state.matched.push(a,b);state.open=[];state.locked=false}else delay=setTimeout(()=>{state.open=[];state.locked=false;drawMemory()},750)}drawMemory();if(state.matched.length===16)status.textContent=`🎉 全部配对！用了 ${state.moves} 次`};board.append(el)})}
+function drawMemory(){board.replaceChildren();const finished=state.matched.length===16;const r=record('pocket-memory',finished?state.moves:undefined,true);status.textContent=(finished?`🎉 全部配对！用了 ${state.moves} 次`:`翻牌 ${state.moves} 次 · 配对 ${state.matched.length/2}/8`)+` · 最佳 ${r?`${r.value} 次（${r.player}）`:'暂无纪录'}`;$('#hint').textContent='每翻开两张计 1 次；完成全部配对后记录，次数越少越好。';state.cards.forEach((v,i)=>{const match=state.matched.includes(i),open=state.open.includes(i);let el=cell(match||open?v:'?',match?'matched':open?'':'card-back');el.setAttribute('aria-label',match||open?v:`第 ${i+1} 张，未翻开`);el.disabled=match||open||state.locked;el.onclick=()=>{state.open.push(i);if(state.open.length===2){state.moves++;state.locked=true;const [a,b]=state.open;if(state.cards[a]===state.cards[b]){state.matched.push(a,b);state.open=[];state.locked=false}else delay=setTimeout(()=>{state.open=[];state.locked=false;drawMemory()},750)}drawMemory()};board.append(el)})}
 function startTTT(){state={b:Array(9).fill(''),busy:false};board.className='grid3';drawTTT()}
 function drawTTT(){const w=winner(state.b);status.textContent=w?(w==='draw'?'势均力敌，平局！':w==='X'?'🎉 你赢了！':'电脑获胜，再来一局？'):state.busy?'电脑思考中…':'轮到你了 · ×';board.replaceChildren();state.b.forEach((v,i)=>{let el=cell(v==='X'?'×':v==='O'?'○':'');el.setAttribute('aria-label',`第 ${i+1} 格 ${v||'空'}`);el.disabled=!!v||state.busy||!!w;el.onclick=()=>{state.b[i]='X';state.busy=true;drawTTT();if(winner(state.b))return;delay=setTimeout(()=>{const m=bestMove(state.b);if(m!==undefined)state.b[m]='O';state.busy=false;drawTTT()},320)};board.append(el)})}
 function startSnake(){state={body:[[7,10],[6,10],[5,10]],dir:[1,0],next:[1,0],food:[14,10],score:0,started:false,over:false,paused:false};let canvas=document.createElement('canvas');canvas.width=400;canvas.height=400;canvas.setAttribute('aria-label','贪吃蛇棋盘');board.append(canvas);for(const [label,d] of [['←','left'],['↑','up'],['↓','down'],['→','right']]){let b=document.createElement('button');b.textContent=label;b.setAttribute('aria-label',d);b.onclick=()=>snakeDirection(d);controls.append(b)}let p=document.createElement('button');p.textContent='Ⅱ';p.setAttribute('aria-label','暂停或继续');p.onclick=pauseSnake;controls.append(p);$('#hint').textContent='按方向键 / WASD 或滑动开始 · 空格暂停';drawSnake()}
