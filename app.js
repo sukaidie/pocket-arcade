@@ -19,6 +19,20 @@ function record(key,value,lower=false){
   return next;
 }
 const playerDialog=$('#player-dialog'),nameInput=$('#player-name');
+// Mobile keyboards can shrink or pan the visual viewport without changing layout height.
+function fitPlayerDialog(){
+  if(!playerDialog.open)return;
+  const viewport=window.visualViewport;
+  const height=viewport?viewport.height:window.innerHeight;
+  const gap=Math.min(32,Math.max(8,height*.04));
+  playerDialog.style.setProperty('--player-top',`${(viewport?.offsetTop||0)+gap}px`);
+  playerDialog.style.setProperty('--player-height',`${Math.max(0,height-gap*2)}px`);
+}
+window.visualViewport?.addEventListener('resize',fitPlayerDialog);
+window.visualViewport?.addEventListener('scroll',fitPlayerDialog);
+window.addEventListener('resize',fitPlayerDialog);
+nameInput.addEventListener('focus',fitPlayerDialog);
+
 try{nameInput.value=localStorage.getItem('pocket-player')||''}catch{}
 $('#cancel-player').onclick=()=>playerDialog.close();
 $('#player-form').onsubmit=e=>{
@@ -30,7 +44,7 @@ $('#player-form').onsubmit=e=>{
 nameInput.oninput=()=>nameInput.setCustomValidity('');
 function cell(text,cls=''){let el=document.createElement('button');el.className='cell '+cls;el.textContent=text;return el}
 function start(){clean();board.replaceChildren();controls.replaceChildren();board.className='';$('#hint').textContent='';if(game==='mines')startMines();if(game==='gomoku')startGomoku();if(game==='blackjack')startBlackjack();if(game==='lights')startLights();if(game==='memory')startMemory();if(game==='sudoku')startSudoku()}
-for(const b of document.querySelectorAll('[data-game]'))b.onclick=()=>{game=b.dataset.game;playerDialog.showModal();nameInput.focus();nameInput.select()};$('#close').onclick=()=>dialog.close();dialog.addEventListener('close',clean);$('#restart').onclick=start;dialog.addEventListener('click',e=>{if(e.target===dialog){let r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
+for(const b of document.querySelectorAll('[data-game]'))b.onclick=()=>{game=b.dataset.game;playerDialog.showModal();fitPlayerDialog();$('#player-title').focus({preventScroll:true})};$('#close').onclick=()=>dialog.close();dialog.addEventListener('close',clean);$('#restart').onclick=start;dialog.addEventListener('click',e=>{if(e.target===dialog){let r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
 function startMemory(){state={cards:[...'🌵🍋🍄🌼🍒🦋🍀🌈🌵🍋🍄🌼🍒🦋🍀🌈'],open:[],matched:[],moves:0,locked:false};for(let i=15;i>0;i--){let j=Math.floor(Math.random()*(i+1));[state.cards[i],state.cards[j]]=[state.cards[j],state.cards[i]]}board.className='grid4';drawMemory()}
 function drawMemory(){board.replaceChildren();const finished=state.matched.length===16;const r=record('pocket-memory',finished?state.moves:undefined,true);status.textContent=(finished?`🎉 全部配对！用了 ${state.moves} 次`:`翻牌 ${state.moves} 次 · 配对 ${state.matched.length/2}/8`)+` · 最佳 ${r?`${r.value} 次（${r.player}）`:'暂无纪录'}`;$('#hint').textContent='每翻开两张计 1 次；完成全部配对后记录，次数越少越好。';state.cards.forEach((v,i)=>{const match=state.matched.includes(i),open=state.open.includes(i);let el=cell(match||open?v:'?',match?'matched':open?'':'card-back');el.setAttribute('aria-label',match||open?v:`第 ${i+1} 张，未翻开`);el.disabled=match||open||state.locked;el.onclick=()=>{state.open.push(i);if(state.open.length===2){state.moves++;state.locked=true;const [a,b]=state.open;if(state.cards[a]===state.cards[b]){state.matched.push(a,b);state.open=[];state.locked=false}else delay=setTimeout(()=>{state.open=[];state.locked=false;drawMemory()},750)}drawMemory()};board.append(el)})}
 function startLights(){
