@@ -1,10 +1,10 @@
-import {toggleLights,selectRecord,sudokuConflict,makeSudoku,createMines,revealMines,gomokuWin,gomokuMove,makeDeck,handValue,blackjackResult} from './engine.js?v=36febd6dd78b32f2037b276b0dd5d51b23e36286';
+import {toggleLights,selectRecord,sudokuConflict,makeSudoku,createMines,revealMines,gomokuWin,gomokuMove,makeDeck,handValue,blackjackResult} from './engine.js?v=a420e60923c4cee453c9366ffa260baf58bfec1f';
 const $=s=>document.querySelector(s),dialog=$('#game-dialog'),board=$('#board'),status=$('#status'),controls=$('#controls');let game='',timer=null,delay=null,state={};
 const names={mines:'扫雷',gomoku:'五子棋',blackjack:'21点',lights:'熄灯挑战',memory:'记忆翻牌',sudoku:'数独'};
 const rules={mines:'9×9 棋盘藏着 10 颗雷。数字表示周围雷数；首次开格及周围安全。',gomoku:'你执黑先手，与电脑对战。横、竖或斜线连成五子即获胜（自由规则，无禁手）。',blackjack:'与庄家比点数，尽量接近 21 点；超过 21 点即爆牌。A 自动计作 1 或 11，J/Q/K 计 10。',lights:'点击一盏灯会切换它和上下左右邻灯，试着熄灭全部灯！',memory:'每次翻开两张牌，找出全部 8 对相同图案。',sudoku:'在空格填入 1—9，让每行、每列、每个九宫格都不重复。'};
 let player='';
 let onlineSession=null;
-const ONLINE_PROTOCOL=3,CLIENT_BUILD="36febd6dd78b32f2037b276b0dd5d51b23e36286";
+const ONLINE_PROTOCOL=3,CLIENT_BUILD="a420e60923c4cee453c9366ffa260baf58bfec1f";
 const records=new Map();
 function clean(){$('#restart').disabled=false;closeOnlineGomoku();clearGomokuEffects();clearInterval(timer);clearTimeout(delay);timer=null;delay=null}
 function record(key,value,lower=false){
