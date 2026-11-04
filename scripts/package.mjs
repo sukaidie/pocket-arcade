@@ -1,4 +1,4 @@
-import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,cp} from 'node:fs/promises';
 const version=process.env.GITHUB_SHA||'local';
 await mkdir('public',{recursive:true});
 for(const file of ['index.html','style.css','app.js','engine.js']){
@@ -7,3 +7,5 @@ for(const file of ['index.html','style.css','app.js','engine.js']){
   if(file==='app.js')source=source.replace("'./engine.js'",`'./engine.js?v=${version}'`);
   await writeFile(`public/${file}`,source);
 }
+
+await cp('vendor','public/vendor',{recursive:true});
