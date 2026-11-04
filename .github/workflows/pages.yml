@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      reset_pages:
+        description: Reset Pages configuration before deploying (brief downtime)
+        type: boolean
+        default: false
 permissions:
   contents: read
   pages: write
@@ -22,6 +27,30 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Reset Pages configuration when explicitly requested
+        if: github.event_name == 'workflow_dispatch' && inputs.reset_pages
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const previous = (await github.rest.repos.getPages({owner, repo})).data;
+            if (previous.cname) throw new Error('Custom domains require a separate recovery procedure');
+            await github.request('DELETE /repos/{owner}/{repo}/pages', {owner, repo});
+            core.info('Pages disabled; recreating the same project site now.');
+            let restored = false;
+            for (let attempt = 0; attempt < 10; attempt++) {
+              try {
+                await github.request('POST /repos/{owner}/{repo}/pages', {owner, repo, build_type: 'workflow'});
+                restored = true;
+                break;
+              } catch (error) {
+                if (![404, 409, 422].includes(error.status)) throw error;
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+            }
+            if (!restored) throw new Error('Pages recreation is pending; re-enable GitHub Actions in Settings > Pages');
+            await github.rest.repos.updateInformationAboutPagesSite({owner, repo, build_type: 'workflow', https_enforced: previous.https_enforced});
+            core.info('Pages configuration restored; proceeding with deployment.');
       - uses: actions/configure-pages@v5
       - name: Cancel stale Pages deployments
         uses: actions/github-script@v7
