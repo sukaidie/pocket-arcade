@@ -156,3 +156,44 @@ test('信令断开不把正常数据连接标记为失败，后台尝试恢复�
  assert.notEqual(host.run('onlineSession.failed'),true);
  assert.equal(host.pending.size,1);
 });
+
+test('房间聊天双向送达，显示昵称，消息确认不改变棋盘或轮次',()=>{
+ const pair=onlinePair(),{host,guest}=pair;
+ assert.equal(host.run("sendRoomChat('你好，一起下棋！')"),true);pair.flush();
+ assert.equal(host.run('onlineSession.chat[0].acked'),true);
+ assert.equal(guest.run('onlineSession.chat[0].text'),'你好，一起下棋！');
+ assert.equal(guest.run('onlineSession.chatUnread'),1);
+ assert.ok(guest.elements.get('#chat-messages').children[0].children[0].textContent.includes('小明'));
+ guest.elements.get('#chat-toggle').onclick();assert.equal(guest.run('onlineSession.chatUnread'),0);
+ guest.run("sendRoomChat('好的！')");pair.flush();
+ assert.equal(host.run('onlineSession.chat.length'),2);
+ assert.equal(host.run('onlineSession.moves.length'),0);assert.equal(guest.run('state.turn'),1);
+});
+test('聊天去重，拒绝空消息、超长消息、伪造发送方，按文本显示标签',()=>{
+ const pair=onlinePair(),{host,guest}=pair;
+ assert.equal(host.run("sendRoomChat('   ')"),false);
+ assert.equal(host.run("sendRoomChat('x'.repeat(201))"),false);
+ host.run("sendRoomChat('<img src=x onerror=alert(1)>')");pair.flush();
+ assert.equal(guest.elements.get('#chat-messages').children[0].children[1].textContent,'<img src=x onerror=alert(1)>');
+ guest.run("receiveRoomChat(onlineSession,{id:'1-1',text:'重复'})");pair.flush();
+ assert.equal(guest.run('onlineSession.chat.length'),1);
+ guest.run("receiveRoomChat(onlineSession,{id:'2-2',text:'伪造'})");assert.equal(guest.run('onlineSession.chat.length'),1);
+});
+test('聊天独立于重开和悔棋，断线禁发、待确认消息重试不重复显示',()=>{
+ const pair=onlinePair(),{host,guest}=pair;
+ host.run("sendRoomChat('这条等待确认')");
+ host.run('retryRoomChat(onlineSession)');pair.flush();
+ assert.equal(guest.run('onlineSession.chat.length'),1);assert.equal(host.run('onlineSession.chat[0].acked'),true);
+ host.run("requestOnlineAction('rematch')");pair.flush();guest.run('replyOnlineRequest(true)');pair.flush();
+ assert.equal(host.run('onlineSession.chat.length'),1);assert.equal(guest.run('onlineSession.chat.length'),1);
+ host.run("failOnline(onlineSession,'断线')");assert.equal(host.run("sendRoomChat('不能发送')"),false);
+ assert.equal(host.elements.get('#chat-input').disabled,true);
+ host.run('closeOnlineGomoku()');assert.equal(host.elements.get('#room-chat').hidden,true);
+ assert.equal(host.elements.get('#chat-messages').children.length,0);
+});
+test('聊天列表限制200条，防止长时间对局无限增加页面内容',()=>{
+ const {guest}=onlinePair();
+ guest.run("for(let i=1;i<=205;i++)receiveRoomChat(onlineSession,{id:'1-'+i,text:'消息'+i})");
+ assert.equal(guest.run('onlineSession.chat.length'),200);
+ assert.equal(guest.run('onlineSession.chat[0].text'),'消息6');
+});
