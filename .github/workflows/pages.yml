@@ -1,84 +1,49 @@
-name: Deploy GitHub Pages
+name: Publish GitHub Pages branch
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      reset_pages:
-        description: Reset Pages configuration before deploying (brief downtime)
-        type: boolean
-        default: false
 permissions:
-  contents: read
+  contents: write
   pages: write
-  id-token: write
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: publish-pages-branch
+  cancel-in-progress: false
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm test
-      - name: Reset Pages configuration when explicitly requested
-        if: github.event_name == 'workflow_dispatch' && inputs.reset_pages
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const previous = (await github.rest.repos.getPages({owner, repo})).data;
-            if (previous.cname) throw new Error('Custom domains require a separate recovery procedure');
-            await github.request('DELETE /repos/{owner}/{repo}/pages', {owner, repo});
-            core.info('Pages disabled; recreating the same project site now.');
-            let restored = false;
-            for (let attempt = 0; attempt < 10; attempt++) {
-              try {
-                await github.request('POST /repos/{owner}/{repo}/pages', {owner, repo, build_type: 'workflow'});
-                restored = true;
-                break;
-              } catch (error) {
-                if (![404, 409, 422].includes(error.status)) throw error;
-                await new Promise(resolve => setTimeout(resolve, 3000));
-              }
-            }
-            if (!restored) throw new Error('Pages recreation is pending; re-enable GitHub Actions in Settings > Pages');
-            await github.rest.repos.updateInformationAboutPagesSite({owner, repo, build_type: 'workflow', https_enforced: previous.https_enforced});
-            core.info('Pages configuration restored; proceeding with deployment.');
-      - uses: actions/configure-pages@v5
-      - name: Cancel stale Pages deployments
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const deployments = await github.rest.repos.listDeployments({owner, repo, environment: 'github-pages', per_page: 10});
-            for (const sha of new Set(deployments.data.map(d => d.sha))) {
-              if (sha === context.sha) continue;
-              try {
-                const result = await github.request('GET /repos/{owner}/{repo}/pages/deployments/{pages_deployment_id}', {owner, repo, pages_deployment_id: sha});
-                if (['deployment_queued', 'deployment_in_progress', 'updating_pages', 'deployment_cancelled'].includes(result.data.status)) {
-                  core.info(`Canceling stale Pages deployment ${sha}`);
-                  await github.request('POST /repos/{owner}/{repo}/pages/deployments/{pages_deployment_id}/cancel', {owner, repo, pages_deployment_id: sha});
-                  await new Promise(resolve => setTimeout(resolve, 3000));
-                }
-              } catch (error) {
-                if (![400, 404, 409, 410].includes(error.status)) throw error;
-                core.info(`Previous deployment ${sha}: ${error.status}`);
-              }
-            }
       - run: node scripts/package.mjs
-      - uses: actions/upload-pages-artifact@v3
+      - name: Update generated gh-pages branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_directory=$(mktemp -d)
+          git worktree add --detach "$publish_directory" origin/gh-pages
+          git -C "$publish_directory" rm -r --ignore-unmatch .
+          cp -R public/. "$publish_directory/"
+          touch "$publish_directory/.nojekyll"
+          git -C "$publish_directory" config user.name 'github-actions[bot]'
+          git -C "$publish_directory" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$publish_directory" add --all
+          if ! git -C "$publish_directory" diff --cached --quiet; then
+            git -C "$publish_directory" commit -m "Publish source $GITHUB_SHA"
+            git -C "$publish_directory" push origin HEAD:gh-pages
+          fi
+      - name: Request branch Pages build
+        uses: actions/github-script@v7
         with:
-          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
-          path: public
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+          script: |
+            try {
+              await github.rest.repos.requestPagesBuild(context.repo);
+            } catch (error) {
+              if (![409, 422].includes(error.status)) throw error;
+              core.info('A Pages build is already queued.');
+            }

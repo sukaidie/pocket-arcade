@@ -9,7 +9,7 @@
 - 熄灯挑战：记录通关最少步数，每局保证可解。
 - 记忆翻牌：记录通关最少翻牌次数。
 
-纯 HTML / CSS / JavaScript，无构建依赖。运行 `python3 -m http.server 8080` 后访问 http://localhost:8080；`npm test` 验证核心逻辑。推送 main 后由 GitHub Actions 自动测试并发布至 GitHub Pages。
+纯 HTML / CSS / JavaScript，无构建依赖。运行 `python3 -m http.server 8080` 后访问 http://localhost:8080；`npm test` 验证核心逻辑。推送 main 后由 GitHub Actions 自动测试、打包并更新 gh-pages 分支，再请求 GitHub Pages 分支构建。发布设置保持 Deploy from a branch → gh-pages → / (root)。
 
 ## 五子棋联机
 
