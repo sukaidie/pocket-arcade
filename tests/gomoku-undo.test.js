@@ -112,7 +112,7 @@ test('双方同时请求不会锁死，断线后双方禁止继续落子',()=>{
  host.run("failOnline(onlineSession,'断线')");
  host.run('playOnlineMove(114)');assert.equal(host.run('onlineSession.moves.length'),1);
  assert.equal(host.elements.get('#board').children[114].disabled,true);
- host.run("handleOnlineMessage(onlineSession,{type:'hello',name:'重连'})");assert.equal(host.run('onlineSession.ready'),false);
+ host.run("handleOnlineMessage(onlineSession,{type:'hello',name:'重连',protocol:ONLINE_PROTOCOL})");assert.equal(host.run('onlineSession.ready'),false);
 });
 
 test('联机白棋获胜也庆祝，不写入人机纪录，终局后禁止再下',()=>{
@@ -134,4 +134,25 @@ test('联机从大厅进入棋局时恢复十五列棋盘布局，双方均生�
   assert.equal(ui.elements.get('#board').className,'gomoku-grid');
   assert.equal(ui.elements.get('#board').children.length,225);
  }
+});
+
+test('不同版本客户端握手失败并明确提示，禁止继续落子',()=>{
+ const {host}=onlinePair();host.run("onlineSession.ready=false;handleOnlineMessage(onlineSession,{type:'hello',name:'旧版朋友'})");
+ assert.equal(host.run('onlineSession.versionMismatch'),true);
+ assert.equal(host.run('onlineSession.ready'),false);
+ assert.ok(host.elements.get('#status').textContent.includes('版本不同'));
+});
+test('重连握手保留棋局，并向另一端同步现有落子',()=>{
+ const pair=onlinePair(),{host,guest}=pair;
+ host.run('playOnlineMove(112)');pair.flush();guest.run('playOnlineMove(113)');pair.flush();
+ host.run("onlineSession.ready=false;onlineSession.failed=false;onlineSession.pending=null;handleOnlineMessage(onlineSession,{type:'hello',name:'小红',protocol:ONLINE_PROTOCOL})");pair.flush();
+ assert.equal(host.run('onlineSession.ready'),true);
+ assert.equal(host.run('onlineSession.moves.length'),2);
+ assert.equal(host.run('JSON.stringify(state.b)'),guest.run('JSON.stringify(state.b)'));
+});
+test('信令断开不把正常数据连接标记为失败，后台尝试恢复信令',()=>{
+ const {host}=onlinePair();host.run("onlineSession.peer={disconnected:true,destroyed:false,reconnect(){}};recoverOnlineSignaling(onlineSession)");
+ assert.equal(host.run('onlineSession.ready'),true);
+ assert.notEqual(host.run('onlineSession.failed'),true);
+ assert.equal(host.pending.size,1);
 });
