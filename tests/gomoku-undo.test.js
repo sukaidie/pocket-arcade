@@ -70,6 +70,7 @@ function onlinePair(){
  const host=setup(),guest=setup(),queue=[];
  for(const [ui,hostSide] of [[host,true],[guest,false]]){
   ui.context.transmit=message=>queue.push({to:hostSide?guest:host,message:JSON.stringify(message)});
+  ui.run("board.className='online-lobby'");
   ui.run(`onlineSession={host:${hostSide},color:${hostSide?1:2},code:'ABC234',names:['小明','小红'],moves:[],revision:0,ready:true,pending:null,conn:{send:transmit,close(){}},peer:{destroy(){}},notice:''};applyOnlineState(onlineSession)`);
  }
  return {host,guest,flush(){let limit=100;while(queue.length){assert.ok(limit-->0,'消息不得无限循环');const {to,message}=queue.shift();to.run(`handleOnlineMessage(onlineSession,${message})`)}}};
@@ -125,4 +126,12 @@ test('联机白棋获胜也庆祝，不写入人机纪录，终局后禁止再�
  assert.equal(guest.elements.get('#win-effects').children.length,37);
  assert.equal(host.run("records.get('pocket-gomoku')"),null);
  host.run('playOnlineMove(150)');assert.equal(host.run('onlineSession.moves.length'),10);
+});
+
+test('联机从大厅进入棋局时恢复十五列棋盘布局，双方均生成225个落点',()=>{
+ const {host,guest}=onlinePair();
+ for(const ui of [host,guest]){
+  assert.equal(ui.elements.get('#board').className,'gomoku-grid');
+  assert.equal(ui.elements.get('#board').children.length,225);
+ }
 });
